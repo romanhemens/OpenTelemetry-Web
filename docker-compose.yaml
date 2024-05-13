@@ -1,0 +1,78 @@
+version: '3.5'
+
+services:
+  
+  # Java Spring Backend
+  petclinic-backend:
+    build:
+      context: .
+    container_name: spring-petclinic-backend
+    depends_on:
+      - ocelot-agent
+    ports:
+      - "9966:9966"
+    networks:
+      - explorviz
+    environment:
+      - LANDSCAPE_TOKEN_ID=${LANDSCAPE_TOKEN_ID}
+      - LANDSCAPE_TOKEN_SECRET=${LANDSCAPE_TOKEN_SECRET}
+    volumes:
+      - agent-vol:/agent
+      - ./inspectit.yml:/agent/inspectit.yml
+    command:
+      [
+        "sh",
+        "-c",
+        'java -Dinspectit.config.file-based.path="/agent/" -javaagent:/agent/inspectit-ocelot-agent.jar -jar /app.jar',
+      ]
+
+  # InspectIT Ocelot-Agent
+  ocelot-agent:
+    image: inspectit/inspectit-ocelot-agent:2.1.1
+    container_name: ocelot-agent-petclinic-backend
+    networks:
+      - explorviz
+    volumes:
+      - agent-vol:/agent
+
+  # Angular Frontend
+  petclinic-frontend:
+    build:
+      context: ./spring-petclinic-angular
+      args:
+        NODE_VERSION: 18.10.0
+    ports:
+      - ${EXTERNAL_PORT}:8080 
+    environment:
+      - LANDSCAPE_TOKEN_ID=${LANDSCAPE_TOKEN_ID}
+      - LANDSCAPE_TOKEN_SECRET=${LANDSCAPE_TOKEN_SECRET}
+    networks:
+      - explorviz
+    depends_on:
+      - petclinic-backend
+
+        
+  # Collector
+  collector:
+    image: otel/opentelemetry-collector:latest
+    hostname: collector 
+    environment:
+      - LANDSCAPE_TOKEN_ID=${LANDSCAPE_TOKEN_ID}
+      - LANDSCAPE_TOKEN_SECRET=${LANDSCAPE_TOKEN_SECRET}
+    command: ["--config=/conf/collector-config.yaml"]
+    volumes:
+      - ./collector-config.yaml:/conf/collector-config.yaml
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    networks:
+      - explorviz
+      
+
+volumes:
+  agent-vol:
+
+networks:
+  explorviz:
+    name: explorviz
+    external: true
